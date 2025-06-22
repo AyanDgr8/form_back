@@ -79,7 +79,8 @@ export async function handleFormSubmission(data) {
 
   try {
     await transporter.sendMail(mailOptions);
-    console.log(`Email sent successfully to ${to} for disposition: ${disposition}`);
+    const timestamp = new Date().toISOString();
+    console.log(`[${timestamp}] Email sent successfully to ${to} for disposition: ${disposition}`);
   } catch (err) {
     console.error('Email sending failed:', err);
   }
