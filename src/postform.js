@@ -1,25 +1,30 @@
-// src/form.js
+// src/postform.js
+// PostgreSQL-powered version of form handling
+// ------------------------------------------------------------
 
-import mysql from 'mysql2/promise';
+import pkg from 'pg';
+const { Pool } = pkg;
 import nodemailer from 'nodemailer';
 import dotenv from 'dotenv';
+import express from 'express';
+import cors from 'cors';
 
 dotenv.config();
 
 // 1. Database -------------------------------------------------------
-export const pool = mysql.createPool({
-  host: process.env.MYSQL_HOST || 'localhost',
-  user: process.env.MYSQL_USER || 'root',
-  password: process.env.MYSQL_PASSWORD || '',
-  database: process.env.MYSQL_DB || 'multyform',
-  port: process.env.MYSQL_PORT || 3306,
-  waitForConnections: true,
-  connectionLimit: 10,
+export const pool = new Pool({
+  host: process.env.PGHOST || 'localhost',
+  user: process.env.PGUSER || 'postgres',
+  password: process.env.PGPASSWORD || '',
+  database: process.env.PGDATABASE || 'multyform',
+  port: process.env.PGPORT || 5432,
+  max: 10,                 // max clients in the pool
+  idleTimeoutMillis: 30000 // close idle clients after 30 s
 });
 
 // 2. Mail transport -------------------------------------------------
 const transporter = nodemailer.createTransport({
-  service: 'gmail', // use whatever provider you prefer
+  service: 'gmail', // or any SMTP provider
   auth: {
     user: process.env.EMAIL_USER,
     pass: process.env.EMAIL_PASSWORD, // app password
@@ -52,8 +57,8 @@ export async function handleFormSubmission(data) {
 
   // ---- store in DB ----
   const sql = `INSERT INTO forms (company, name, contact_number, email, disposition, query)
-               VALUES (?, ?, ?, ?, ?, ?)`;
-  await pool.execute(sql, [company, name, contact_number, email, disposition, query]);
+               VALUES ($1, $2, $3, $4, $5, $6)`;
+  await pool.query(sql, [company, name, contact_number, email, disposition, query]);
 
   // ---- send email ----
   const to = DISPOSITION_TO_EMAIL[disposition] || 'info@shams.ae';
@@ -79,7 +84,6 @@ export async function handleFormSubmission(data) {
 
   try {
     await transporter.sendMail(mailOptions);
-    console.log(`Email sent successfully to ${to} for disposition: ${disposition}`);
   } catch (err) {
     console.error('Email sending failed:', err);
   }
@@ -89,14 +93,11 @@ export async function handleFormSubmission(data) {
  * Retrieves all form submissions ordered by newest first
  */
 export async function listForms() {
-  const [rows] = await pool.execute('SELECT * FROM forms ORDER BY created_at DESC');
+  const { rows } = await pool.query('SELECT * FROM forms ORDER BY created_at DESC');
   return rows;
 }
 
-// --- Stand-alone express server (used when this module is run directly) ----
-import express from 'express';
-import cors from 'cors';
-
+// --- Stand-alone express server (when run directly) -----------------
 if (import.meta.url === `file://${process.argv[1]}`) {
   const app = express();
   const PORT = process.env.PORT || 5000;
@@ -124,5 +125,5 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     }
   });
 
-  app.listen(PORT, () => console.log(`API listening on port ${PORT}`));
+  app.listen(PORT, () => console.log(`PostgreSQL API listening on port ${PORT}`));
 }
