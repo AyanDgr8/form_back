@@ -34,6 +34,7 @@ const DISPOSITION_TO_EMAIL = {
   'New Lead': 'info@shams.ae',
   'Renewals': 'renewals@shams.ae',
   'Concierge Services': 'concierge@shams.ae',
+  'General Enquiry': null, // No email needed for General Enquiry
 };
 
 /**
@@ -56,6 +57,13 @@ export async function handleFormSubmission(data) {
   await pool.execute(sql, [company, name, contact_number, email, disposition, query]);
 
   // ---- send email ----
+  // Skip email sending for General Enquiry
+  if (disposition === 'General Enquiry') {
+    const timestamp = new Date().toISOString();
+    console.log(`[${timestamp}] Form submission stored for General Enquiry (no email sent)`);
+    return;
+  }
+
   const to = DISPOSITION_TO_EMAIL[disposition] || 'info@shams.ae';
 
   const mailOptions = {
