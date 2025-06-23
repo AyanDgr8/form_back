@@ -93,9 +93,6 @@ export async function handleFormSubmission(data) {
       <b>Email:</b> ${email || '—'}<br/>
       <b>Contact:</b> ${contact_number || '—'}<br/>
       <b>Query:</b> ${query || '—'}<br/>
-      ${queue_name ? `<b>Queue:</b> ${queue_name} (${queue_id || '—'})<br/>` : ''}
-      ${agent_id ? `<b>Agent:</b> ${agent_id} (Ext: ${agent_ext || '—'})<br/>` : ''}
-      ${caller_id__name ? `<b>Caller ID:</b> ${caller_id__name} (${caller_id__number || '—'})<br/>` : ''}
       <br/>
       Thank you!<br/>
       Regards,
@@ -161,16 +158,13 @@ export async function updateFormSubmission(id, data) {
     subject: 'Updated Inbound Call – For your action!',
     html: `
       <p>Greetings!</p>
-      <p>An existing enquiry has been updated for the below client, kindly please assist them for the below mentioned.</p>
+      <p>We received enquiry for the below client, kindly please assist them for the below mentioned.</p>
       <br/>
       <b>Company:</b> ${company || '—'}<br/>
       <b>Client/Caller Name:</b> ${name || '—'}<br/>
       <b>Email:</b> ${email || '—'}<br/>
       <b>Contact:</b> ${contact_number || '—'}<br/>
       <b>Query:</b> ${query || '—'}<br/>
-      ${queue_name ? `<b>Queue:</b> ${queue_name} (${queue_id || '—'})<br/>` : ''}
-      ${agent_id ? `<b>Agent:</b> ${agent_id} (Ext: ${agent_ext || '—'})<br/>` : ''}
-      ${caller_id__name ? `<b>Caller ID:</b> ${caller_id__name} (${caller_id__number || '—'})<br/>` : ''}
       <br/>
       Thank you!<br/>
       Regards,

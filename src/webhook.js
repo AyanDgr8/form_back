@@ -16,8 +16,8 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 /**
- * Process webhook data from either query parameters (GET) or request body (POST)
- * @param {Object} data - Data from query params or request body
+ * Process webhook data from query parameters (GET)
+ * @param {Object} data - Data from query params
  * @param {Object} res - Express response object
  */
 async function processWebhookData(data, res) {
@@ -50,12 +50,12 @@ async function processWebhookData(data, res) {
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
     
     // Use caller name as company name initially if available
-    const company = cidname || 'Unknown Company';
-    const name = cidname || 'Unknown Caller';
-    const contact_number = cidnum || '';
-    const email = ''; // Will be filled by the user in the form
-    const disposition = 'General Enquiry'; // Default disposition
-    const query = `Call received from queue: ${qname || 'Unknown'}`;
+    const company = "";
+    const name = "";
+    const contact_number = "";
+    const email = ""; 
+    const disposition ="";
+    const query = "";
 
     await pool.execute(sql, [
       company,
@@ -91,38 +91,11 @@ app.get('/webhook', async (req, res) => {
   await processWebhookData(req.query, res);
 });
 
-// Handle POST requests for webhook
-app.post('/webhook', async (req, res) => {
-  console.log('POST webhook received with body:', req.body);
-  // Ensure req.body is not undefined
-  if (!req.body || Object.keys(req.body).length === 0) {
-    // Try to get data from URL-encoded form data
-    const formData = req.body;
-    console.log('Trying form data:', formData);
-    await processWebhookData(formData, res);
-  } else {
-    await processWebhookData(req.body, res);
-  }
-});
-
 // Add the webhook route to the main API server
 export function setupWebhookRoutes(mainApp) {
-  // Register the routes directly on the main app
+  // Register the route directly on the main app
   mainApp.get('/webhook', async (req, res) => {
     await processWebhookData(req.query, res);
-  });
-  
-  mainApp.post('/webhook', async (req, res) => {
-    console.log('POST webhook received with body:', req.body);
-    // Ensure req.body is not undefined
-    if (!req.body || Object.keys(req.body).length === 0) {
-      // Try to get data from URL-encoded form data
-      const formData = req.body;
-      console.log('Trying form data:', formData);
-      await processWebhookData(formData, res);
-    } else {
-      await processWebhookData(req.body, res);
-    }
   });
   
   console.log('Webhook routes registered successfully');
