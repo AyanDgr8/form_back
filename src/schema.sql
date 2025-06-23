@@ -34,3 +34,13 @@ INSERT INTO customer_field_values (field_name, field_value) VALUES
   ('disposition', 'General Enquiry'),
   ('disposition', 'New Lead'),
   ('disposition', 'Renewals');
+
+
+
+
+  alter table forms add column queue_id VARCHAR(100) after query;
+  alter table forms add column queue_name VARCHAR(100) after queue_id;
+  alter table forms add column agent_id VARCHAR(100) after queue_name;
+  alter table forms add column agent_ext VARCHAR(100) after agent_id;
+  alter table forms add column caller_id__name VARCHAR(100) after agent_ext;
+  alter table forms add column caller_id__number VARCHAR(100) after caller_id__name;
