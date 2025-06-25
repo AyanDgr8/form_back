@@ -24,20 +24,12 @@ export const pool = new Pool({
 
 // 2. Mail transport -------------------------------------------------
 const transporter = nodemailer.createTransport({
-  host: 'smtp.office365.com',
-  port: 587,
-  secure: false,
+  service: 'gmail', // or any SMTP provider
   auth: {
-    user: 'no-reply@shams.ae',
-    pass: 'rcjsbkrwgvvqsx',
+    user: process.env.EMAIL_USER,
+    pass: process.env.EMAIL_PASSWORD, // app password
   },
-  tls: {
-    ciphers: 'SSLv3',
-    rejectUnauthorized: false
-  }
 });
-
-const from = 'no-reply@shams.ae';
 
 const DISPOSITION_TO_EMAIL = {
   'Customer Support': 'customersupport@shams.ae',
@@ -72,7 +64,7 @@ export async function handleFormSubmission(data) {
   const to = DISPOSITION_TO_EMAIL[disposition] || 'info@shams.ae';
 
   const mailOptions = {
-    from,
+    from: process.env.EMAIL_USER,
     to,
     subject: 'Inbound Call – For your action!',
     html: `

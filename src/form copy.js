@@ -20,29 +20,15 @@ export const pool = mysql.createPool({
 
 // 2. Mail transport -------------------------------------------------
 const transporter = nodemailer.createTransport({
-  host: 'smtp.office365.com',
-  port: 587,
-  secure: false,
+  service: 'gmail', // use whatever provider you prefer
   auth: {
-    user: process.env.EMAIL_USER || 'no-reply@shams.ae',
-    pass: process.env.EMAIL_PASSWORD || 'rcjsbkpkrwgvvqsx', // app password
-  }
+    user: process.env.EMAIL_USER,
+    pass: process.env.EMAIL_PASSWORD, // app password
+  },
 });
-
-transporter.verify((error, success) => {
-  if (error) {
-    console.log("SMTP Error:", error);
-  } else {
-    console.log("SMTP is working.");
-  }
-});
-
-// Use the authenticated email as the from address
-const from = process.env.EMAIL_USER || 'no-reply@shams.ae';
 
 const DISPOSITION_TO_EMAIL = {
   'Customer Support': 'customersupport@shams.ae',
-  // 'Customer Support': 'ayan@multycomm.com',
   'Consultant support': 'consultantsupport@shams.ae',
   'Application Support': 'applicantsupport@shams.ae',
   'B2B Lead': 'sales@shams.ae',
@@ -95,7 +81,7 @@ export async function handleFormSubmission(data) {
   const to = DISPOSITION_TO_EMAIL[disposition] || 'info@shams.ae';
 
   const mailOptions = {
-    from: from,
+    from: process.env.EMAIL_USER,
     to,
     subject: 'Inbound Call – For your action!',
     html: `
@@ -167,7 +153,7 @@ export async function updateFormSubmission(id, data) {
   const to = DISPOSITION_TO_EMAIL[disposition] || 'info@shams.ae';
 
   const mailOptions = {
-    from,
+    from: process.env.EMAIL_USER,
     to,
     subject: 'Updated Inbound Call – For your action!',
     html: `
