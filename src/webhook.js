@@ -4,6 +4,7 @@ import express from 'express';
 import { pool } from './form.js';
 import dotenv from 'dotenv';
 import cors from 'cors';
+import { updateCallDisposition } from './voicemeetme.js';
 
 dotenv.config();
 
@@ -35,19 +36,22 @@ async function processWebhookData(data, res) {
       agent,       // AGENT_ID
       qid,         // QUEUE_ID
       qname,       // QUEUE_NAME
-      agentExtn    // AGENT_EXTENSION
+      agentExtn,    // AGENT_EXTENSION
+      call_disposition, // CALL_DISPOSITION (optional)
+      tenant, // VOICEMEETME tenant (optional)
+      callId // VOICEMEETME campaign call ID (optional)
     } = data;
 
     // Log the incoming request
     console.log('Webhook received:', {
-      cidname, cidnum, agent, qid, qname, agentExtn
+      cidname, cidnum, agent, qid, qname, agentExtn, call_disposition, tenant, callId
     });
 
     // Create a temporary record in the database with the call parameters
     const sql = `INSERT INTO forms 
-      (company, name, contact_number, email, disposition, query, 
+      (company, name, contact_number, email, disposition, query, call_disposition,
        queue_id, queue_name, agent_id, agent_ext, caller_id__name, caller_id__number)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
     
     // Use caller name as company name initially if available
     const company = "";
@@ -64,6 +68,7 @@ async function processWebhookData(data, res) {
       email,
       disposition,
       query,
+      call_disposition || '',
       qid || '',
       qname || '',
       agent || '',
@@ -75,6 +80,16 @@ async function processWebhookData(data, res) {
     // Get the ID of the inserted record to pass to the form page
     const [result] = await pool.execute('SELECT LAST_INSERT_ID() as id');
     const recordId = result[0].id;
+
+    // Forward disposition to VoiceMeetMe immediately if details provided
+    if (call_disposition && tenant && callId) {
+      try {
+        await updateCallDisposition(tenant, callId, call_disposition);
+        console.log(`Call disposition forwarded to VoiceMeetMe for callId ${callId}`);
+      } catch (e) {
+        console.error('Failed to push disposition to VoiceMeetMe:', e.message);
+      }
+    }
 
     // Redirect to the frontend form page with the record ID
     // Use the frontend port from environment variables

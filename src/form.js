@@ -20,35 +20,21 @@ export const pool = mysql.createPool({
 
 // 2. Mail transport -------------------------------------------------
 const transporter = nodemailer.createTransport({
-  host: 'smtp.office365.com',
-  port: 587,
-  secure: false,
+  service: 'gmail', // use whatever provider you prefer
   auth: {
-    user: process.env.EMAIL_USER || 'no-reply@shams.ae',
-    pass: process.env.EMAIL_PASSWORD || 'rcjsbkpkrwgvvqsx', // app password
-  }
+    user: process.env.EMAIL_USER,
+    pass: process.env.EMAIL_PASSWORD, // app password
+  },
 });
-
-transporter.verify((error, success) => {
-  if (error) {
-    console.log("SMTP Error:", error);
-  } else {
-    console.log("SMTP is working.");
-  }
-});
-
-// Use the authenticated email as the from address
-const from = process.env.EMAIL_USER || 'no-reply@shams.ae';
 
 const DISPOSITION_TO_EMAIL = {
-  'Customer Support': 'customersupport@shams.ae',
-  // 'Customer Support': 'ayan@multycomm.com',
-  'Consultant support': 'consultantsupport@shams.ae',
-  'Application Support': 'applicantsupport@shams.ae',
-  'B2B Lead': 'sales@shams.ae',
-  'New Lead': 'info@shams.ae',
-  'Renewals': 'renewals@shams.ae',
-  'Concierge Services': 'concierge@shams.ae',
+  'Customer Support': 'ayan@multycomm.com',
+  'Consultant support': 'ayandgr5@gmail.com',
+  'Application Support': 'meenakshi@multycomm.com',
+  'B2B Lead': 'akash@multycomm.com',
+  'New Lead': 'sanjana@multycomm.com',
+  'Renewals': 'vidhika@multycomm.com',
+  'Concierge Services': 'ayan@multycomm.com',
   'General Enquiry': null, // No email needed for General Enquiry
 };
 
@@ -63,6 +49,7 @@ export async function handleFormSubmission(data) {
     contact_number,
     email,
     disposition,
+    call_disposition,
     query,
     queue_id,
     queue_name,
@@ -70,18 +57,22 @@ export async function handleFormSubmission(data) {
     agent_ext,
     caller_id__name,
     caller_id__number,
+    after_disposition,
+    after_sub_disposition,
+    after_follow_up_notes,
   } = data;
 
   // ---- store in DB ----
   const sql = `INSERT INTO forms (
-    company, name, contact_number, email, disposition, query,
-    queue_id, queue_name, agent_id, agent_ext, caller_id__name, caller_id__number
-  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
+    company, name, contact_number, email, disposition, call_disposition, query,
+    queue_id, queue_name, agent_id, agent_ext, caller_id__name, caller_id__number,
+    after_disposition, after_sub_disposition, after_follow_up_notes
+  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
   
   await pool.execute(sql, [
-    company, name, contact_number, email, disposition, query,
-    queue_id || null, queue_name || null, agent_id || null, 
-    agent_ext || null, caller_id__name || null, caller_id__number || null
+    company ?? null, name ?? null, contact_number ?? null, email ?? null, disposition ?? null, call_disposition ?? null, query ?? null,
+    queue_id ?? null, queue_name ?? null, agent_id ?? null, agent_ext ?? null, caller_id__name ?? null, caller_id__number ?? null,
+    after_disposition ?? null, after_sub_disposition ?? null, after_follow_up_notes ?? null,
   ]);
 
   // ---- send email ----
@@ -95,7 +86,7 @@ export async function handleFormSubmission(data) {
   const to = DISPOSITION_TO_EMAIL[disposition] || 'info@shams.ae';
 
   const mailOptions = {
-    from: from,
+    from: process.env.EMAIL_USER,
     to,
     subject: 'Inbound Call – For your action!',
     html: `
@@ -128,34 +119,50 @@ export async function handleFormSubmission(data) {
  * @param {Object} data Updated form data
  */
 export async function updateFormSubmission(id, data) {
+  // fetch existing row to keep not-null columns intact
+  const current = await getFormById(id);
+  if (!current) throw new Error(`Form with id ${id} not found`);
+
   const {
-    company,
-    name,
-    contact_number,
-    email,
-    disposition,
-    query,
-    queue_id,
-    queue_name,
-    agent_id,
-    agent_ext,
-    caller_id__name,
-    caller_id__number,
+    company = current.company,
+    name = current.name,
+    contact_number = current.contact_number,
+    email = current.email,
+    disposition = current.disposition,
+    query = current.query,
+    call_disposition = current.call_disposition,
+    queue_id = current.queue_id,
+    queue_name = current.queue_name,
+    agent_id = current.agent_id,
+    agent_ext = current.agent_ext,
+    caller_id__name = current.caller_id__name,
+    caller_id__number = current.caller_id__number,
+    after_disposition = current.after_disposition,
+    after_sub_disposition = current.after_sub_disposition,
+    after_follow_up_notes = current.after_follow_up_notes,
   } = data;
 
   // ---- update in DB ----
   const sql = `UPDATE forms SET 
     company = ?, name = ?, contact_number = ?, email = ?, 
     disposition = ?, query = ?, queue_id = ?, queue_name = ?,
-    agent_id = ?, agent_ext = ?, caller_id__name = ?, caller_id__number = ?
+    agent_id = ?, agent_ext = ?, caller_id__name = ?, caller_id__number = ?, 
+    call_disposition = ?, after_disposition = ?, after_sub_disposition = ?, after_follow_up_notes = ?
     WHERE id = ?`;
   
   await pool.execute(sql, [
     company, name, contact_number, email, disposition, query,
-    queue_id || null, queue_name || null, agent_id || null, 
-    agent_ext || null, caller_id__name || null, caller_id__number || null,
-    id
+    queue_id ?? null, queue_name ?? null, agent_id ?? null, agent_ext ?? null, caller_id__name ?? null, caller_id__number ?? null,
+    call_disposition ?? null, after_disposition ?? null, after_sub_disposition ?? null, after_follow_up_notes ?? null, id
   ]);
+
+  // If the update payload only contained call_disposition, no email is required
+  const meaningfulKeys = Object.keys(data).filter(k => data[k] !== undefined);
+  if (meaningfulKeys.length === 1 && meaningfulKeys[0] === 'call_disposition') {
+    const ts = new Date().toISOString();
+    console.log(`[${ts}] Call disposition updated (id=${id}) – email suppressed`);
+    return;
+  }
 
   // ---- send email notification about update ----
   if (disposition === 'General Enquiry') {
@@ -167,7 +174,7 @@ export async function updateFormSubmission(id, data) {
   const to = DISPOSITION_TO_EMAIL[disposition] || 'info@shams.ae';
 
   const mailOptions = {
-    from,
+    from: process.env.EMAIL_USER,
     to,
     subject: 'Updated Inbound Call – For your action!',
     html: `

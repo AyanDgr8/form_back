@@ -45,4 +45,8 @@ INSERT INTO customer_field_values (field_name, field_value) VALUES
   alter table forms add column caller_id__name VARCHAR(100) after agent_ext;
   alter table forms add column caller_id__number VARCHAR(100) after caller_id__name;
 
-  
+  -- adding new column for the after dispositions
+ ALTER TABLE forms
+  ADD COLUMN after_disposition        VARCHAR(255) NULL  after call_disposition,
+  ADD COLUMN after_sub_disposition    VARCHAR(255) NULL  after after_disposition,
+  ADD COLUMN after_follow_up_notes    TEXT NULL after after_sub_disposition;
