@@ -1,0 +1,35 @@
+version: "3.9"
+
+services:
+  form_back:
+    build: .
+    container_name: form_back
+    restart: unless-stopped
+    ports:
+      - "8990:8989"
+    env_file:
+      - .env
+    depends_on:
+      - mysql
+    working_dir: /usr/src/app
+    # volumes:
+    #   - .:/usr/src/app  # Uncomment for live dev
+
+  mysql:
+    image: mysql:8.0
+    container_name: mysql
+    restart: unless-stopped
+    environment:
+      - MYSQL_ROOT_PASSWORD=rootpass
+      - MYSQL_DATABASE=${MYSQL_DB}
+      - MYSQL_USER=${MYSQL_USER}
+      - MYSQL_PASSWORD=${MYSQL_PASSWORD}
+    volumes:
+      - mysqldata:/var/lib/mysql
+      - ./src/schema.sql:/docker-entrypoint-initdb.d/schema.sql:ro  # 👈 Mount schema.sql for auto-exec
+    ports:
+      - "3306:3306"
+
+volumes:
+  mysqldata:
+

@@ -20,35 +20,21 @@ export const pool = mysql.createPool({
 
 // 2. Mail transport -------------------------------------------------
 const transporter = nodemailer.createTransport({
-  host: 'smtp.office365.com',
-  port: 587,
-  secure: false,
+  service: 'gmail', // use whatever provider you prefer
   auth: {
-    user: process.env.EMAIL_USER || 'no-reply@shams.ae',
-    pass: process.env.EMAIL_PASSWORD || 'rcjsbkpkrwgvvqsx', // app password
-  }
+    user: process.env.EMAIL_USER,
+    pass: process.env.EMAIL_PASSWORD, // app password
+  },
 });
-
-transporter.verify((error, success) => {
-  if (error) {
-    console.log("SMTP Error:", error);
-  } else {
-    console.log("SMTP is working.");
-  }
-});
-
-// Use the authenticated email as the from address
-const from = process.env.EMAIL_USER || 'no-reply@shams.ae';
 
 const DISPOSITION_TO_EMAIL = {
-  // 'Customer Support': 'customersupport@shams.ae',
   'Customer Support': 'ayan@multycomm.com',
-  'Consultant support': 'consultantsupport@shams.ae',
-  'Application Support': 'applicantsupport@shams.ae',
-  'B2B Lead': 'sales@shams.ae',
-  'New Lead': 'info@shams.ae',
-  'Renewals': 'renewals@shams.ae',
-  'Concierge Services': 'concierge@shams.ae',
+  'Consultant support': 'ayandgr5@gmail.com',
+  'Application Support': 'meenakshi@multycomm.com',
+  'B2B Lead': 'akash@multycomm.com',
+  'New Lead': 'sanjana@multycomm.com',
+  'Renewals': 'vidhika@multycomm.com',
+  'Concierge Services': 'ayan@multycomm.com',
   'General Enquiry': null, // No email needed for General Enquiry
 };
 
@@ -70,18 +56,23 @@ export async function handleFormSubmission(data) {
     agent_ext,
     caller_id__name,
     caller_id__number,
+    after_disposition,
+    after_sub_disposition,
+    after_sub_disposition_2,
+    after_follow_up_notes,
   } = data;
 
   // ---- store in DB ----
   const sql = `INSERT INTO forms (
     company, name, contact_number, email, disposition, query,
-    queue_id, queue_name, agent_id, agent_ext, caller_id__name, caller_id__number
-  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
+    queue_id, queue_name, agent_id, agent_ext, caller_id__name, caller_id__number,
+    after_disposition, after_sub_disposition, after_sub_disposition_2, after_follow_up_notes
+  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
   
   await pool.execute(sql, [
-    company, name, contact_number, email, disposition, query,
-    queue_id || null, queue_name || null, agent_id || null, 
-    agent_ext || null, caller_id__name || null, caller_id__number || null
+    company ?? null, name ?? null, contact_number ?? null, email ?? null, disposition ?? null, query ?? null,
+    queue_id ?? null, queue_name ?? null, agent_id ?? null, agent_ext ?? null, caller_id__name ?? null, caller_id__number ?? null,
+    after_disposition ?? null, after_sub_disposition ?? null, after_sub_disposition_2 ?? null, after_follow_up_notes ?? null,
   ]);
 
   // ---- send email ----
@@ -95,7 +86,7 @@ export async function handleFormSubmission(data) {
   const to = DISPOSITION_TO_EMAIL[disposition] || 'info@shams.ae';
 
   const mailOptions = {
-    from: from,
+    from: process.env.EMAIL_USER,
     to,
     subject: 'Inbound Call – For your action!',
     html: `
@@ -128,42 +119,64 @@ export async function handleFormSubmission(data) {
  * @param {Object} data Updated form data
  */
 export async function updateFormSubmission(id, data) {
+  // fetch existing row to keep not-null columns intact
+  const current = await getFormById(id);
+  if (!current) throw new Error(`Form with id ${id} not found`);
+
   const {
-    company,
-    name,
-    contact_number,
-    email,
-    disposition,
-    query,
-    queue_id,
-    queue_name,
-    agent_id,
-    agent_ext,
-    caller_id__name,
-    caller_id__number,
+    company = current.company,
+    name = current.name,
+    contact_number = current.contact_number,
+    email = current.email,
+    disposition = current.disposition,
+    query = current.query,
+    queue_id = current.queue_id,
+    queue_name = current.queue_name,
+    agent_id = current.agent_id,
+    agent_ext = current.agent_ext,
+    caller_id__name = current.caller_id__name,
+    caller_id__number = current.caller_id__number,
+    after_disposition = current.after_disposition,
+    after_sub_disposition = current.after_sub_disposition,
+    after_sub_disposition_2 = current.after_sub_disposition_2,
+    after_follow_up_notes = current.after_follow_up_notes,
   } = data;
 
   // ---- update in DB ----
   const sql = `UPDATE forms SET 
     company = ?, name = ?, contact_number = ?, email = ?, 
     disposition = ?, query = ?, queue_id = ?, queue_name = ?,
-    agent_id = ?, agent_ext = ?, caller_id__name = ?, caller_id__number = ?
+    agent_id = ?, agent_ext = ?, caller_id__name = ?, caller_id__number = ?, 
+    after_disposition = ?, after_sub_disposition = ?, after_sub_disposition_2 = ?, after_follow_up_notes = ?
     WHERE id = ?`;
   
   await pool.execute(sql, [
     company, name, contact_number, email, disposition, query,
-    queue_id || null, queue_name || null, agent_id || null, 
-    agent_ext || null, caller_id__name || null, caller_id__number || null,
-    id
+    queue_id ?? null, queue_name ?? null, agent_id ?? null, agent_ext ?? null, caller_id__name ?? null, caller_id__number ?? null,
+    after_disposition ?? null, after_sub_disposition ?? null, after_sub_disposition_2 ?? null, after_follow_up_notes ?? null, id
   ]);
 
-  // ---- send email notification about update ----
+  // ---- decide whether an email is required ----
+  const payloadKeys = Object.keys(data).filter(k => data[k] !== undefined);
+
+  // If the update touches ONLY after-call fields, suppress the email –
+  // we only want one notification (sent on initial creation).
+  const touchesOnlyAfterFields =
+    payloadKeys.length > 0 && payloadKeys.every(k => k.startsWith('after_'));
+
+  if (touchesOnlyAfterFields) {
+    const ts = new Date().toISOString();
+    console.log(`[${ts}] After-call fields updated (id=${id}) – email suppressed`);
+    return;
+  }
+
   if (disposition === 'General Enquiry') {
     const timestamp = new Date().toISOString();
     console.log(`[${timestamp}] Form update stored for General Enquiry (no email sent)`);
     return;
   }
 
+  // ---- send email notification about update ----
   const to = DISPOSITION_TO_EMAIL[disposition] || 'info@shams.ae';
 
   const mailOptions = {
@@ -209,6 +222,26 @@ export async function getFormById(id) {
 export async function listForms() {
   const [rows] = await pool.execute('SELECT * FROM forms ORDER BY created_at DESC');
   return rows;
+}
+
+/**
+ * Finds the most recent form submission that matches a queue + caller-number pair.
+ * @param {string} queueId  The queue_id received from the Web-Socket invite event
+ * @param {string} callerNumber  Raw caller number as provided by the call-center
+ * @returns {Promise<Object|null>}  The matching form row or null if none found
+ */
+export async function findFormByQueueAndCaller(queueId, callerNumber) {
+  const [rows] = await pool.execute(
+    `SELECT *
+       FROM forms
+      WHERE queue_id = ?
+        AND caller_id__number = ?
+      ORDER BY created_at DESC
+      LIMIT 1`,
+    [queueId, callerNumber]
+  );
+
+  return rows.length > 0 ? rows[0] : null;
 }
 
 // --- Stand-alone express server (used when this module is run directly) ----
@@ -273,6 +306,26 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     try {
       const rows = await listForms();
       res.json(rows);
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({ error: 'Internal Server Error' });
+    }
+  });
+
+  // Search for an existing form by queueId & caller number
+  app.get('/forms/search', async (req, res) => {
+    const { queueId, callerNumber } = req.query;
+
+    if (!queueId || !callerNumber) {
+      return res.status(400).json({ error: 'queueId and callerNumber are required' });
+    }
+
+    try {
+      const form = await findFormByQueueAndCaller(queueId, callerNumber);
+      if (!form) {
+        return res.status(404).json({ error: 'Form not found' });
+      }
+      res.json(form);
     } catch (err) {
       console.error(err);
       res.status(500).json({ error: 'Internal Server Error' });
